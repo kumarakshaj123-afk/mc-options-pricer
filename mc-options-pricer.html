@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monte Carlo Options Pricer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2026;
+    --surface3: #252830;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #f0f1f3;
+    --text2: #9aa0ad;
+    --text3: #5c6270;
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.15);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --orange: #f97316;
+    --orange-dim: rgba(249,115,22,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --amber: #f59e0b;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 58px;
+    position: sticky;
+    top: 0;
+    background: rgba(14,15,17,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: var(--blue);
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-icon svg { width: 16px; height: 16px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-badge {
+    font-size: 11px; font-weight: 500;
+    background: var(--blue-dim);
+    color: var(--blue);
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(59,130,246,0.2);
+    letter-spacing: 0.02em;
+  }
+
+  /* Layout */
+  main {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* Sidebar */
+  .sidebar { position: sticky; top: 74px; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  .panel-body { padding: 16px; }
+
+  /* Type toggle */
+  .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .type-btn {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font);
+  }
+  .type-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+  .type-btn.active-call { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+  .type-btn.active-put { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+  .type-btn.active-eu { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .type-btn.active-as { background: var(--amber) !important; border-color: var(--amber) !important; color: #000 !important; }
+
+  /* Sliders */
+  .param-row {
+    margin-bottom: 14px;
+  }
+  .param-row:last-child { margin-bottom: 0; }
+  .param-label-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .param-name { font-size: 12px; color: var(--text2); }
+  .param-sym { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+  .param-val {
+    font-size: 13px; font-weight: 500;
+    font-family: var(--font-mono);
+    color: var(--text);
+    min-width: 60px;
+    text-align: right;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--text);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border2);
+    transition: transform 0.1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--text);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+
+  /* Run button */
+  .run-btn {
+    width: 100%;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font);
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: -0.01em;
+    margin-top: 4px;
+  }
+  .run-btn:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,0.3); }
+  .run-btn:active { transform: translateY(0); box-shadow: none; }
+  .run-btn:disabled { background: var(--surface3); color: var(--text3); cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .progress-track {
+    height: 2px;
+    background: var(--surface3);
+    border-radius: 1px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 2px;
+    background: var(--blue);
+    border-radius: 1px;
+    width: 0%;
+    transition: width 0.15s ease;
+  }
+
+  /* Results pane */
+  .results { display: flex; flex-direction: column; gap: 1rem; }
+
+  /* Metric cards */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.125rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent, transparent);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .metric-card.accent-blue { --accent: var(--blue); }
+  .metric-card.accent-green { --accent: var(--green); }
+  .metric-card.accent-orange { --accent: var(--orange); }
+  .metric-label { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
+  .metric-value { font-size: 26px; font-weight: 600; font-family: var(--font-mono); color: var(--text); letter-spacing: -0.02em; line-height: 1; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 5px; font-family: var(--font-mono); }
+  .metric-badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    font-size: 10px; font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+  .badge-call { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(59,130,246,0.2); }
+  .badge-put { background: var(--orange-dim); color: var(--orange); border: 1px solid rgba(249,115,22,0.2); }
+
+  /* Greeks */
+  .greeks-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  .greek-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .greek-sym { font-size: 16px; color: var(--text3); margin-bottom: 4px; }
+  .greek-name { font-size: 10px; font-weight: 500; color: var(--text3); letter-spacing: 0.05em; margin-bottom: 6px; }
+  .greek-val { font-size: 14px; font-weight: 500; font-family: var(--font-mono); color: var(--text); }
+
+  /* Charts */
+  .chart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .chart-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text3); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
+  .chart-title-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* CI bar */
+  .ci-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text2);
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ci-item { display: flex; gap: 6px; }
+  .ci-key { color: var(--text3); }
+  .ci-val { color: var(--text); font-weight: 500; }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    text-align: center;
+    padding: 1.5rem;
+    font-size: 12px;
+    color: var(--text3);
+  }
+  footer a { color: var(--text2); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  /* Responsive */
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    .sidebar { position: static; }
+    .metric-grid { grid-template-columns: repeat(3, 1fr); }
+    .greeks-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 520px) {
+    header { padding: 0 1rem; }
+    main { padding: 1rem 1rem 3rem; gap: 1rem; }
+    .metric-grid { grid-template-columns: 1fr 1fr; }
+    .greeks-grid { grid-template-columns: repeat(3, 1fr); }
+    .metric-value { font-size: 20px; }
+  }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .results > * { animation: fadeUp 0.3s ease both; }
+  .results > *:nth-child(2) { animation-delay: 0.05s; }
+  .results > *:nth-child(3) { animation-delay: 0.1s; }
+  .results > *:nth-child(4) { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-icon">
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="1,13 5,7 8,10 11,5 15,9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
+    MC Options Pricer
+  </a>
+  <div class="header-right">
+    <span class="header-badge">Monte Carlo · Black-Scholes</span>
+  </div>
+</header>
+
+<main>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Option Type</span>
+      </div>
+      <div class="panel-body">
+        <div class="toggle-row" id="typeToggle">
+          <button class="type-btn active-call" onclick="setType('call',this)">Call</button>
+          <button class="type-btn" onclick="setType('put',this)">Put</button>
+        </div>
+        <div class="toggle-row" id="styleToggle">
+          <button class="type-btn active-eu" onclick="setStyle('european',this)">European</button>
+          <button class="type-btn" onclick="setStyle('asian',this)">Asian</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Market Parameters</span>
+      </div>
+      <div class="panel-body">
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Spot Price <span class="param-sym">S</span></span>
+            <span class="param-val" id="S-v">$100</span>
+          </div>
+          <input type="range" id="S" min="10" max="500" step="1" value="100" oninput="upd('S')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Strike Price <span class="param-sym">K</span></span>
+            <span class="param-val" id="K-v">$100</span>
+          </div>
+          <input type="range" id="K" min="10" max="500" step="1" value="100" oninput="upd('K')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Volatility <span class="param-sym">σ</span></span>
+            <span class="param-val" id="vol-v">20.0%</span>
+          </div>
+          <input type="range" id="vol" min="0.01" max="1" step="0.01" value="0.2" oninput="upd('vol')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Risk-Free Rate <span class="param-sym">r</span></span>
+            <span class="param-val" id="r-v">5.0%</span>
+          </div>
+          <input type="range" id="r" min="0" max="0.2" step="0.005" value="0.05" oninput="upd('r')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Dividend Yield <span class="param-sym">q</span></span>
+            <span class="param-val" id="q-v">0.0%</span>
+          </div>
+          <input type="range" id="q" min="0" max="0.1" step="0.005" value="0" oninput="upd('q')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Time to Expiry <span class="param-sym">T</span></span>
+            <span class="param-val" id="T-v">1.00 yr</span>
+          </div>
+          <input type="range" id="T" min="0.05" max="3" step="0.05" value="1" oninput="upd('T')">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Simulation Settings</span>
+      </div>
+      <div class="panel-body">
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Simulations <span class="param-sym">N</span></span>
+            <span class="param-val" id="N-v">20,000</span>
+          </div>
+          <input type="range" id="N" min="1000" max="200000" step="1000" value="20000" oninput="upd('N')">
+        </div>
+        <div class="param-row">
+          <div class="param-label-row">
+            <span class="param-name">Time Steps <span class="param-sym">M</span></span>
+            <span class="param-val" id="M-v">52</span>
+          </div>
+          <input type="range" id="M" min="10" max="252" step="1" value="52" oninput="upd('M')">
+        </div>
+        <button class="run-btn" id="runBtn" onclick="runSim()">Run Simulation</button>
+        <div class="progress-track"><div class="progress-fill" id="prog"></div></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Results -->
+  <section class="results" id="results" aria-live="polite">
+
+    <div class="metric-grid">
+      <div class="metric-card accent-blue">
+        <div class="metric-label">MC Price</div>
+        <div class="metric-value" id="mcPrice">—</div>
+        <div class="metric-sub" id="mcSub">Monte Carlo estimate</div>
+        <span class="metric-badge badge-call" id="typeBadge">CALL</span>
+      </div>
+      <div class="metric-card accent-green">
+        <div class="metric-label">Black-Scholes</div>
+        <div class="metric-value" id="bsPrice">—</div>
+        <div class="metric-sub" id="bsSub">Analytical (European)</div>
+      </div>
+      <div class="metric-card accent-orange">
+        <div class="metric-label">Std Error</div>
+        <div class="metric-value" id="stdErr">—</div>
+        <div class="metric-sub">±1σ precision</div>
+      </div>
+    </div>
+
+    <div class="ci-strip">
+      <div class="ci-item"><span class="ci-key">95% CI</span><span class="ci-val" id="ciVal">—</span></div>
+      <div class="ci-item"><span class="ci-key">MC vs BS</span><span class="ci-val" id="mcvbs">—</span></div>
+      <div class="ci-item"><span class="ci-key">ITM paths</span><span class="ci-val" id="itmPct">—</span></div>
+      <div class="ci-item"><span class="ci-key">Moneyness</span><span class="ci-val" id="moneyness">—</span></div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-title"><span class="chart-title-dot"></span>Greeks (Black-Scholes finite difference)</div>
+      <div class="greeks-grid">
+        <div class="greek-card"><div class="greek-sym">Δ</div><div class="greek-name">Delta</div><div class="greek-val" id="gDelta">—</div></div>
+        <div class="greek-card"><div class="greek-sym">Γ</div><div class="greek-name">Gamma</div><div class="greek-val" id="gGamma">—</div></div>
+        <div class="greek-card"><div class="greek-sym">Θ</div><div class="greek-name">Theta /day</div><div class="greek-val" id="gTheta">—</div></div>
+        <div class="greek-card"><div class="greek-sym">ν</div><div class="greek-name">Vega /1%</div><div class="greek-val" id="gVega">—</div></div>
+        <div class="greek-card"><div class="greek-sym">ρ</div><div class="greek-name">Rho /1%</div><div class="greek-val" id="gRho">—</div></div>
+      </div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-title"><span class="chart-title-dot" style="background:var(--green)"></span>Sample price paths (30 shown)</div>
+      <div class="chart-wrap" style="height: 220px;"><canvas id="pathChart" role="img" aria-label="Sample Monte Carlo simulated price paths over time"></canvas></div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="chart-title"><span class="chart-title-dot" style="background:var(--orange)"></span>Payoff distribution at expiry</div>
+      <div class="chart-wrap" style="height: 200px;"><canvas id="distChart" role="img" aria-label="Histogram of simulated discounted payoffs"></canvas></div>
+    </div>
+
+  </section>
+</main>
+
+<footer>
+  Built with Monte Carlo simulation &amp; Black-Scholes analytics &nbsp;·&nbsp;
+  GBM model, geometric Brownian motion &nbsp;·&nbsp;
+  <a href="https://en.wikipedia.org/wiki/Monte_Carlo_methods_for_option_pricing" target="_blank" rel="noopener">Learn more ↗</a>
+</footer>
+
+<script>
+let optType = 'call', optStyle = 'european';
+let pathCh, distCh;
+
+function setType(t, el) {
+  optType = t;
+  document.querySelectorAll('#typeToggle .type-btn').forEach(b => {
+    b.className = 'type-btn';
+  });
+  el.className = t === 'call' ? 'type-btn active-call' : 'type-btn active-put';
+  const badge = document.getElementById('typeBadge');
+  badge.textContent = t.toUpperCase();
+  badge.className = t === 'call' ? 'metric-badge badge-call' : 'metric-badge badge-put';
+}
+function setStyle(s, el) {
+  optStyle = s;
+  document.querySelectorAll('#styleToggle .type-btn').forEach(b => b.className = 'type-btn');
+  el.className = s === 'european' ? 'type-btn active-eu' : 'type-btn active-as';
+  document.getElementById('bsSub').textContent = s === 'european' ? 'Analytical (European)' : 'N/A for Asian';
+}
+
+function upd(id) {
+  const v = parseFloat(document.getElementById(id).value);
+  const el = document.getElementById(id + '-v');
+  if (id === 'S' || id === 'K') el.textContent = '$' + v.toFixed(0);
+  else if (id === 'vol' || id === 'r' || id === 'q') el.textContent = (v * 100).toFixed(1) + '%';
+  else if (id === 'T') el.textContent = v.toFixed(2) + ' yr';
+  else if (id === 'N') el.textContent = v.toLocaleString();
+  else el.textContent = v;
+}
+
+function getP() {
+  return {
+    S: +document.getElementById('S').value,
+    K: +document.getElementById('K').value,
+    T: +document.getElementById('T').value,
+    r: +document.getElementById('r').value,
+    sig: +document.getElementById('vol').value,
+    q: +document.getElementById('q').value,
+    N: +document.getElementById('N').value,
+    M: +document.getElementById('M').value,
+  };
+}
+
+function normRand() {
+  let u, v;
+  do { u = Math.random(); } while (u === 0);
+  do { v = Math.random(); } while (v === 0);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function simulatePaths(p) {
+  const dt = p.T / p.M;
+  const drift = (p.r - p.q - 0.5 * p.sig * p.sig) * dt;
+  const diff = p.sig * Math.sqrt(dt);
+  const paths = [];
+  for (let i = 0; i < p.N; i++) {
+    const path = [p.S];
+    let S = p.S;
+    for (let j = 0; j < p.M; j++) {
+      S *= Math.exp(drift + diff * normRand());
+      path.push(S);
+    }
+    paths.push(path);
+  }
+  return paths;
+}
+
+function payoff(path, p) {
+  if (optStyle === 'european') {
+    const ST = path[path.length - 1];
+    return Math.max(0, optType === 'call' ? ST - p.K : p.K - ST);
+  } else {
+    const avg = path.slice(1).reduce((a, b) => a + b, 0) / p.M;
+    return Math.max(0, optType === 'call' ? avg - p.K : p.K - avg);
+  }
+}
+
+function ncdf(x) {
+  const a1=-1.26551223,a2=1.00002368,a3=.37409196,a4=.09678418,a5=-.18628806,
+        a6=.27886807,a7=-1.13520398,a8=1.48851587,a9=-.82215223,a10=.17087294;
+  const k = 1 / (1 + 0.2316419 * Math.abs(x));
+  const poly = k*(a1+k*(a2+k*(a3+k*(a4+k*(a5+k*(a6+k*(a7+k*(a8+k*(a9+k*a10)))))))));
+  const p = 1 - Math.exp(-x*x/2) / Math.sqrt(2*Math.PI) * poly;
+  return x >= 0 ? p : 1 - p;
+}
+
+function bsPrice(S, K, T, r, sig, q, type) {
+  if (T <= 0) return Math.max(0, type === 'call' ? S - K : K - S);
+  const d1 = (Math.log(S/K) + (r - q + 0.5*sig*sig)*T) / (sig*Math.sqrt(T));
+  const d2 = d1 - sig*Math.sqrt(T);
+  if (type === 'call') return S*Math.exp(-q*T)*ncdf(d1) - K*Math.exp(-r*T)*ncdf(d2);
+  return K*Math.exp(-r*T)*ncdf(-d2) - S*Math.exp(-q*T)*ncdf(-d1);
+}
+
+function computeGreeks(p) {
+  const h = p.S * 0.01, hS = 0.001, hT = 1/365, hR = 0.0001;
+  const base = bsPrice(p.S, p.K, p.T, p.r, p.sig, p.q, optType);
+  const up   = bsPrice(p.S+h, p.K, p.T, p.r, p.sig, p.q, optType);
+  const dn   = bsPrice(p.S-h, p.K, p.T, p.r, p.sig, p.q, optType);
+  const delta = (up - dn) / (2*h);
+  const gamma = (up - 2*base + dn) / (h*h);
+  const theta = (bsPrice(p.S, p.K, Math.max(p.T-hT,0.001), p.r, p.sig, p.q, optType) - base) / hT;
+  const vega  = (bsPrice(p.S, p.K, p.T, p.r, p.sig+hS, p.q, optType) - base) / hS / 100;
+  const rho   = (bsPrice(p.S, p.K, p.T, p.r+hR, p.sig, p.q, optType) - base) / hR / 100;
+  return { delta, gamma, theta, vega, rho };
+}
+
+function drawPaths(paths, p) {
+  const labels = Array.from({length: p.M+1}, (_, i) => i);
+  const sample = paths.slice(0, 30);
+  const datasets = sample.map((path, i) => ({
+    data: path,
+    borderColor: `rgba(59,130,246,${0.15 + 0.025*i})`,
+    borderWidth: 1,
+    pointRadius: 0,
+    tension: 0.2,
+    fill: false,
+  }));
+  datasets.push({
+    data: Array(p.M+1).fill(p.K),
+    borderColor: 'rgba(249,115,22,0.6)',
+    borderWidth: 1.5,
+    borderDash: [5, 4],
+    pointRadius: 0,
+    fill: false,
+  });
+  if (pathCh) pathCh.destroy();
+  pathCh = new Chart(document.getElementById('pathChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          ticks: { font: { size: 11, family: "'JetBrains Mono', monospace" }, color: '#5c6270', callback: v => '$'+v.toFixed(0) },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.06)' }
+        }
+      },
+      animation: { duration: 400 }
+    }
+  });
+}
+
+function drawDist(payoffs) {
+  const mn = Math.min(...payoffs), mx = Math.max(...payoffs);
+  if (mx === mn) return;
+  const bins = 35;
+  const bw = (mx - mn) / bins;
+  const counts = Array(bins).fill(0);
+  const labels = [];
+  for (let i = 0; i < bins; i++) labels.push((mn + i*bw + bw/2).toFixed(2));
+  payoffs.forEach(v => {
+    const b = Math.min(Math.floor((v - mn) / bw), bins-1);
+    counts[b]++;
+  });
+  const colors = counts.map((_, i) => {
+    const mid = mn + (i+0.5)*bw;
+    return mid <= 0.001 ? 'rgba(239,68,68,0.5)' : 'rgba(59,130,246,0.6)';
+  });
+  if (distCh) distCh.destroy();
+  distCh = new Chart(document.getElementById('distChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, borderRadius: 2, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 10, font: { size: 10, family: "'JetBrains Mono', monospace" }, color: '#5c6270', callback: (_, i) => i % 5 === 0 ? '$'+parseFloat(labels[i]).toFixed(0) : '' },
+          grid: { display: false },
+          border: { color: 'rgba(255,255,255,0.06)' }
+        },
+        y: {
+          ticks: { font: { size: 10 }, color: '#5c6270' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.06)' }
+        }
+      },
+      animation: { duration: 400 }
+    }
+  });
+}
+
+function runSim() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  const prog = document.getElementById('prog');
+  prog.style.width = '0%';
+
+  requestAnimationFrame(() => {
+    prog.style.width = '15%';
+    setTimeout(() => {
+      const p = getP();
+      prog.style.width = '35%';
+      setTimeout(() => {
+        const paths = simulatePaths(p);
+        prog.style.width = '65%';
+        setTimeout(() => {
+          const disc = Math.exp(-p.r * p.T);
+          const payoffs = paths.map(path => payoff(path, p) * disc);
+          const n = payoffs.length;
+          const mean = payoffs.reduce((a, b) => a + b, 0) / n;
+          const variance = payoffs.reduce((a, b) => a + (b-mean)**2, 0) / (n-1);
+          const se = Math.sqrt(variance / n);
+          const ci_lo = mean - 1.96*se, ci_hi = mean + 1.96*se;
+          const itm = payoffs.filter(v => v > 0.001).length;
+          const itmPct = (itm / n * 100).toFixed(1);
+          const moneyness = (p.S / p.K).toFixed(3);
+
+          document.getElementById('mcPrice').textContent = '$'+mean.toFixed(4);
+          document.getElementById('stdErr').textContent = '$'+se.toFixed(5);
+          document.getElementById('mcSub').textContent = n.toLocaleString() + ' paths · ' + p.M + ' steps';
+          document.getElementById('ciVal').textContent = '[$'+ci_lo.toFixed(3)+', $'+ci_hi.toFixed(3)+']';
+          document.getElementById('itmPct').textContent = itmPct + '%';
+          document.getElementById('moneyness').textContent = moneyness + ' (' + (p.S > p.K ? (optType==='call'?'ITM':'OTM') : p.S < p.K ? (optType==='call'?'OTM':'ITM') : 'ATM') + ')';
+
+          const bs = bsPrice(p.S, p.K, p.T, p.r, p.sig, p.q, optType);
+          if (optStyle === 'european') {
+            document.getElementById('bsPrice').textContent = '$'+bs.toFixed(4);
+            const err = Math.abs(mean - bs);
+            document.getElementById('mcvbs').textContent = '$'+err.toFixed(4) + ' (' + (err/bs*100).toFixed(2) + '%)';
+          } else {
+            document.getElementById('bsPrice').textContent = 'N/A';
+            document.getElementById('mcvbs').textContent = 'Asian: no closed form';
+          }
+
+          const g = computeGreeks(p);
+          document.getElementById('gDelta').textContent = g.delta.toFixed(4);
+          document.getElementById('gGamma').textContent = g.gamma.toFixed(5);
+          document.getElementById('gTheta').textContent = g.theta.toFixed(4);
+          document.getElementById('gVega').textContent = g.vega.toFixed(4);
+          document.getElementById('gRho').textContent = g.rho.toFixed(4);
+
+          drawPaths(paths, p);
+          drawDist(payoffs);
+
+          prog.style.width = '100%';
+          btn.disabled = false;
+          btn.textContent = 'Run Simulation';
+          setTimeout(() => prog.style.width = '0%', 600);
+        }, 30);
+      }, 20);
+    }, 10);
+  });
+}
+
+// Init display values
+['S','K','T','r','vol','q','N','M'].forEach(upd);
+runSim();
+</script>
+</body>
+</html>
